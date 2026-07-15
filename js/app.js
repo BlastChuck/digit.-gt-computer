@@ -194,6 +194,10 @@ function render() {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4Z"/></svg>
           Modifica
         </button>
+        <button class="btn-notify" data-action="notes" data-id="${r.id}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 7h10"/><path d="M7 12h7"/><path d="M7 17h5"/><path d="M4 4h16v16H4z"/></svg>
+          Note
+        </button>
         <button class="btn-success" data-action="complete" data-id="${r.id}">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
           Completa
@@ -281,7 +285,7 @@ function openAddModal() {
   setTimeout(() => document.getElementById('fReason').focus(), 100);
 }
 
-function openEditModal(recordId) {
+function openEditModal(recordId, focusNotes = false) {
   const rec = data.records.find(r => r.id === recordId);
   if (!rec) return;
   const overlay = document.getElementById('addOverlay');
@@ -295,7 +299,14 @@ function openEditModal(recordId) {
   overlay.style.display = 'flex';
   clearInterval(datetimeInterval);
   datetimeInterval = setInterval(updateDatetimePreview, 30000);
-  setTimeout(() => document.getElementById('fReason').focus(), 100);
+  setTimeout(() => {
+    if (focusNotes) {
+      document.getElementById('fNotes').focus();
+      document.getElementById('fNotes').select();
+    } else {
+      document.getElementById('fReason').focus();
+    }
+  }, 100);
 }
 
 function closeAddModal() {
@@ -400,6 +411,8 @@ document.getElementById('activeGrid').addEventListener('click', (e) => {
 
   if (action === 'edit') {
     openEditModal(id);
+  } else if (action === 'notes') {
+    openEditModal(id, true);
   } else if (action === 'complete') {
     pendingCompleteId = id;
     document.getElementById('fPrice').value = '';
