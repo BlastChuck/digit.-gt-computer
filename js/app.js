@@ -47,6 +47,10 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+function formatNotesText(str) {
+  return escapeHtml(str || '').replace(/\n/g, '<br>');
+}
+
 function buildReadyMessage(rec) {
   const device = rec.deviceModel ? `${rec.deviceType} (${rec.deviceModel})` : rec.deviceType;
   return `Gentile ${rec.customerName}, il Suo ${device} (ticket ${ticketLabel(rec.ticketNumber)}) è pronto per il ritiro presso ${SHOP_NAME}, ${SHOP_LOCATION}. La aspettiamo in negozio.`;
@@ -171,6 +175,7 @@ function render() {
       <h3 class="device-name">${escapeHtml(r.deviceType)}</h3>
       <div class="device-model">${r.deviceModel ? escapeHtml(r.deviceModel) : '—'}</div>
       <div class="reason-box">${escapeHtml(r.reason)}</div>
+      ${r.notes ? `<div class="notes-box"><div class="notes-label">Note aggiuntive</div><div class="notes-text">${formatNotesText(r.notes)}</div></div>` : ''}
       <div class="delivery-info">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
         <span>Consegna prevista: <strong>${escapeHtml(deliveryText)}</strong></span>
@@ -185,6 +190,10 @@ function render() {
         </div>
       </div>
       <div class="card-actions">
+        <button class="btn-ghost" data-action="edit" data-id="${r.id}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          Modifica
+        </button>
         <button class="btn-success" data-action="complete" data-id="${r.id}">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
           Completa
@@ -230,25 +239,72 @@ function updateDatetimePreview() {
     'Ingresso in laboratorio: ' + fmtDate(new Date().toISOString());
 }
 
-function openAddModal() {
+function resetRecordForm() {
   document.getElementById('fDeviceType').value = 'PC Desktop';
   document.getElementById('fDeviceModel').value = '';
   document.getElementById('fReason').value = '';
   document.getElementById('fCustomer').value = '';
   document.getElementById('fPhone').value = '';
   document.getElementById('fEmail').value = '';
+  document.getElementById('fNotes').value = '';
   document.getElementById('fDeliveryDate').value = defaultDeliveryDate();
   document.querySelector('input[name="deliverySlot"][value="mattina"]').checked = true;
+}
+
+function populateRecordForm(rec) {
+  document.getElementById('fDeviceType').value = rec.deviceType || 'PC Desktop';
+  document.getElementById('fDeviceModel').value = rec.deviceModel || '';
+  document.getElementById('fReason').value = rec.reason || '';
+  document.getElementById('fCustomer').value = rec.customerName || '';
+  document.getElementById('fPhone').value = rec.customerPhone || '';
+  document.getElementById('fEmail').value = rec.customerEmail || '';
+  document.getElementById('fNotes').value = rec.notes || '';
+  document.getElementById('fDeliveryDate').value = rec.deliveryDate || defaultDeliveryDate();
+  const slot = rec.deliverySlot || 'mattina';
+  document.querySelectorAll('input[name="deliverySlot"]').forEach(el => {
+    el.checked = el.value === slot;
+  });
+}
+
+function openAddModal() {
+  const overlay = document.getElementById('addOverlay');
+  overlay.dataset.mode = 'create';
+  overlay.dataset.recordId = '';
+  document.getElementById('addTitle').textContent = 'Nuovo dispositivo in riparazione';
+  document.getElementById('confirmAddBtn').textContent = 'Registra dispositivo';
+  resetRecordForm();
   document.getElementById('formErr').style.display = 'none';
   updateDatetimePreview();
-  document.getElementById('addOverlay').style.display = 'flex';
+  overlay.style.display = 'flex';
+  clearInterval(datetimeInterval);
+  datetimeInterval = setInterval(updateDatetimePreview, 30000);
+  setTimeout(() => document.getElementById('fReason').focus(), 100);
+}
+
+function openEditModal(recordId) {
+  const rec = data.records.find(r => r.id === recordId);
+  if (!rec) return;
+  const overlay = document.getElementById('addOverlay');
+  overlay.dataset.mode = 'edit';
+  overlay.dataset.recordId = recordId;
+  document.getElementById('addTitle').textContent = 'Modifica dispositivo in riparazione';
+  document.getElementById('confirmAddBtn').textContent = 'Salva modifiche';
+  populateRecordForm(rec);
+  document.getElementById('formErr').style.display = 'none';
+  updateDatetimePreview();
+  overlay.style.display = 'flex';
   clearInterval(datetimeInterval);
   datetimeInterval = setInterval(updateDatetimePreview, 30000);
   setTimeout(() => document.getElementById('fReason').focus(), 100);
 }
 
 function closeAddModal() {
-  document.getElementById('addOverlay').style.display = 'none';
+  const overlay = document.getElementById('addOverlay');
+  overlay.style.display = 'none';
+  overlay.dataset.mode = 'create';
+  overlay.dataset.recordId = '';
+  document.getElementById('addTitle').textContent = 'Nuovo dispositivo in riparazione';
+  document.getElementById('confirmAddBtn').textContent = 'Registra dispositivo';
   clearInterval(datetimeInterval);
 }
 
@@ -284,11 +340,33 @@ document.getElementById('confirmAddBtn').addEventListener('click', async () => {
   const customerName = document.getElementById('fCustomer').value.trim();
   const customerPhone = document.getElementById('fPhone').value.trim();
   const customerEmail = document.getElementById('fEmail').value.trim();
+  const notes = document.getElementById('fNotes').value.trim();
   const deliveryDate = document.getElementById('fDeliveryDate').value;
   const deliverySlot = getDeliverySlot();
+  const overlay = document.getElementById('addOverlay');
+  const editId = overlay.dataset.recordId;
 
   if (!reason || !customerName || !customerPhone || !deliveryDate) {
     document.getElementById('formErr').style.display = 'block';
+    return;
+  }
+
+  if (editId) {
+    const rec = data.records.find(r => r.id === editId);
+    if (!rec) return;
+    rec.deviceType = deviceType;
+    rec.deviceModel = deviceModel;
+    rec.reason = reason;
+    rec.customerName = customerName;
+    rec.customerPhone = customerPhone;
+    rec.customerEmail = customerEmail || null;
+    rec.notes = notes;
+    rec.deliveryDate = deliveryDate;
+    rec.deliverySlot = deliverySlot;
+    await saveData();
+    closeAddModal();
+    render();
+    toast('Registrazione aggiornata — ' + ticketLabel(rec.ticketNumber));
     return;
   }
 
@@ -297,6 +375,7 @@ document.getElementById('confirmAddBtn').addEventListener('click', async () => {
     ticketNumber: data.nextTicket,
     deviceType, deviceModel, reason, customerName, customerPhone,
     customerEmail: customerEmail || null,
+    notes,
     deliveryDate, deliverySlot,
     dateAdded: new Date().toISOString(),
     status: 'active',
@@ -319,7 +398,9 @@ document.getElementById('activeGrid').addEventListener('click', (e) => {
   const rec = data.records.find(r => r.id === id);
   if (!rec) return;
 
-  if (action === 'complete') {
+  if (action === 'edit') {
+    openEditModal(id);
+  } else if (action === 'complete') {
     pendingCompleteId = id;
     document.getElementById('fPrice').value = '';
     document.getElementById('priceErr').style.display = 'none';

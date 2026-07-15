@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^cd '/Users/giorgio/Desktop/progettini/coding/digit\\. gt computer' && node --check js/app\\.js$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}
